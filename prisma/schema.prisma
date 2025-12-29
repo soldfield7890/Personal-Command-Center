@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SourceSystem {
+  DRIVE
+  MANUAL
+  IMPORTED_FIXTURE
+}
+
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum Domain {
+  FINANCE
+  HEALTH
+  HOME
+  VEHICLES
+  GARDEN
+  HUNTING
+  WORK
+  LIFE_ADMIN
+  SYSTEM
+  PEOPLE
+  GROCERY
+  TASKS
+}
+
+enum AssetType {
+  HOME
+  VEHICLE
+  EQUIPMENT
+  PROPERTY
+  ACCOUNT
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  SOLD
+  RETIRED
+}
+
+enum SecurityType {
+  STOCK
+  ETF
+  MUTUAL_FUND
+  CRYPTO
+  CASH
+  OTHER
+}
+
+enum FinanceActionLabel {
+  BUY
+  HOLD
+  WATCH
+  AVOID
+}
+
+enum ManifestStatus {
+  OK
+  WARN
+  ERROR
+}
+
+model Household {
+  id        String   @id @default(uuid())
+  name      String
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  people    Person[]
+  assets    Asset[]
+  documents Document[]
+}
+
+model Person {
+  id            String   @id @default(uuid())
+  householdId   String
+  firstName     String
+  lastName      String
+  preferredName String?
+  role          String
+  dob           DateTime?
+  email         String?
+  phone         String?
+
+  sourceSystem  SourceSystem
+  sourceRef     String?
+  asOf          DateTime?
+  ingestedAt    DateTime @default(now())
+  confidence    ConfidenceLevel @default(HIGH)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id])
+}
+
+model Asset {
+  id          String   @id @default(uuid())
+  householdId String
+  type        AssetType
+  name        String
+  status      AssetStatus @default(ACTIVE)
+  metadata    Json?
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  asOf         DateTime?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  householdId String
+  title       String
+  domain      Domain
+  driveFileId String?
+  drivePath   String?
+  mimeType    String?
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  asOf         DateTime?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id])
+}
+
+model SourceManifest {
+  id         String   @id @default(uuid())
+  domain     Domain
+  sourceRef  String
+  asOf       DateTime?
+  ingestedAt DateTime @default(now())
+  rowCount   Int      @default(0)
+  status     ManifestStatus @default(OK)
+  message    String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model FinanceSecurity {
+  id           String   @id @default(uuid())
+  ticker       String?
+  name         String
+  securityType SecurityType
+  currency     String   @default("USD")
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  asOf         DateTime?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  positions    FinancePosition[]
+  scores       FinanceSecurityScore[]
+}
+
+model FinanceAccount {
+  id          String   @id @default(uuid())
+  name        String
+  institution String?
+  accountType String?
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  asOf         DateTime?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  positions   FinancePosition[]
+}
+
+model FinancePosition {
+  id          String   @id @default(uuid())
+  securityId  String
+  accountId   String?
+  quantity    Decimal  @db.Decimal(18, 6)
+  avgCost     Decimal? @db.Decimal(18, 6)
+  marketValue Decimal? @db.Decimal(18, 2)
+  asOf        DateTime?
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  security FinanceSecurity @relation(fields: [securityId], references: [id])
+  account  FinanceAccount? @relation(fields: [accountId], references: [id])
+}
+
+model FinanceScoreRun {
+  id              String   @id @default(uuid())
+  engineVersion   String
+  runAt           DateTime @default(now())
+  sourceManifestId String?
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  scores          FinanceSecurityScore[]
+}
+
+model FinanceSecurityScore {
+  id                   String   @id @default(uuid())
+  scoreRunId            String
+  securityId            String
+  componentScores       Json
+  finalScore            Decimal  @db.Decimal(6, 2)
+  actionLabel           FinanceActionLabel
+  buyUnderPrice         Decimal? @db.Decimal(18, 4)
+  valuationBandLow      Decimal? @db.Decimal(18, 4)
+  valuationBandBase     Decimal? @db.Decimal(18, 4)
+  valuationBandHigh     Decimal? @db.Decimal(18, 4)
+  expectedValue         Decimal? @db.Decimal(18, 4)
+  guardrailFlags        Json
+  unknownCount          Int      @default(0)
+  unknownPenaltyApplied Boolean  @default(false)
+
+  sourceSystem SourceSystem
+  sourceRef    String?
+  asOf         DateTime?
+  ingestedAt   DateTime @default(now())
+  confidence   ConfidenceLevel @default(HIGH)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  scoreRun FinanceScoreRun @relation(fields: [scoreRunId], references: [id])
+  security FinanceSecurity @relation(fields: [securityId], references: [id])
+
+  @@unique([scoreRunId, securityId])
+}
